@@ -1,579 +1,935 @@
-# -*- coding: utf-8 -*-
-"""
-Cornell Box - Проект по компьютерной графике
-Реализация Корнуэльской комнаты с интерактивным управлением
-"""
-
 import pygame
-import moderngl
+from pygame.locals import *
+from OpenGL.GL import *
+from OpenGL.GLU import *
 import numpy as np
-import sys
-import os
-from objects import Cube, Sphere
-from materials import Material
-from camera import Camera
-from ui import UI
+import math
 
-class CornellBox:
-    def __init__(self, width=1200, height=800):
-        """Инициализация приложения"""
-        # Инициализация PyGame
+# Константы
+SCREEN_WIDTH = 1200
+SCREEN_HEIGHT = 800
+FPS = 60
+
+class Camera:
+    """Класс камеры для свободного перемещения внутри комнаты"""
+    def __init__(self):
+        # Позиция камеры ВНУТРИ комнаты
+        self.position = np.array([0.0, 1.0, 2.0])  # Стартуем недалеко от входа
+        
+        # Направление взгляда (вектор вперед)
+        self.front = np.array([0.0, 0.0, -1.0])  # Смотрим вглубь комнаты
+        
+        # Вектор "вверх" камеры
+        self.up = np.array([0.0, 1.0, 0.0])
+        
+        # Углы Эйлера для вращения
+        self.yaw = -90.0   # Поворот по горизонтали (0 = смотрим на +X)
+        self.pitch = 0.0   # Наклон вверх/вниз
+        
+        # Чувствительность мыши
+        self.mouse_sensitivity = 0.1
+        
+        # Скорость перемещения
+        self.movement_speed = 0.1
+        
+        # Обновляем векторы камеры на основе углов
+        self.update_camera_vectors()
+        
+        # Состояние клавиш для плавного управления
+        self.keys_pressed = {
+            pygame.K_w: False,
+            pygame.K_s: False,
+            pygame.K_a: False,
+            pygame.K_d: False,
+            pygame.K_q: False,  # Вверх
+            pygame.K_e: False   # Вниз
+        }
+    
+    def update_camera_vectors(self):
+        """Обновляет векторы камеры на основе углов Эйлера"""
+        # Вычисляем новый вектор front
+        front = np.array([
+            math.cos(math.radians(self.yaw)) * math.cos(math.radians(self.pitch)),
+            math.sin(math.radians(self.pitch)),
+            math.sin(math.radians(self.yaw)) * math.cos(math.radians(self.pitch))
+        ])
+        self.front = front / np.linalg.norm(front)  # Нормализуем
+        
+        # Вычисляем вектор right
+        world_up = np.array([0.0, 1.0, 0.0])
+        self.right = np.cross(self.front, world_up)
+        self.right = self.right / np.linalg.norm(self.right)
+        
+        # Пересчитываем вектор up
+        self.up = np.cross(self.right, self.front)
+        self.up = self.up / np.linalg.norm(self.up)
+    
+    def process_mouse_movement(self, xoffset, yoffset):
+        """Обрабатывает движение мыши"""
+        self.yaw += xoffset * self.mouse_sensitivity
+        self.pitch += yoffset * self.mouse_sensitivity
+        
+        # Ограничиваем угол pitch, чтобы не перевернуть камеру
+        if self.pitch > 89.0:
+            self.pitch = 89.0
+        if self.pitch < -89.0:
+            self.pitch = -89.0
+        
+        # Обновляем векторы камеры
+        self.update_camera_vectors()
+    
+    def process_keyboard(self):
+        """Обрабатывает нажатия клавиш для движения"""
+        velocity = self.movement_speed
+        
+        if self.keys_pressed[pygame.K_w]:  # Вперед
+            self.position += self.front * velocity
+        if self.keys_pressed[pygame.K_s]:  # Назад
+            self.position -= self.front * velocity
+        if self.keys_pressed[pygame.K_a]:  # Влево
+            self.position -= self.right * velocity
+        if self.keys_pressed[pygame.K_d]:  # Вправо
+            self.position += self.right * velocity
+        if self.keys_pressed[pygame.K_q]:  # Вверх
+            self.position += self.up * velocity
+        if self.keys_pressed[pygame.K_e]:  # Вниз
+            self.position -= self.up * velocity
+            
+        # Ограничиваем позицию камеры внутри комнаты (примерно)
+        room_half = 2.3  # Половина размера комнаты минус небольшой запас
+        self.position[0] = max(-room_half, min(room_half, self.position[0]))
+        self.position[1] = max(-1.8, min(4.5, self.position[1]))  # Не выходим за пол и потолок
+        self.position[2] = max(-room_half, min(room_half, self.position[2]))
+    
+    def get_view_matrix(self):
+        """Возвращает матрицу вида для камеры"""
+        target = self.position + self.front
+        return gluLookAt(
+            self.position[0], self.position[1], self.position[2],  # Позиция камеры
+            target[0], target[1], target[2],                      # Точка, на которую смотрим
+            self.up[0], self.up[1], self.up[2]                    # Вектор "вверх"
+        )
+    
+    def set_key(self, key, state):
+        """Устанавливает состояние клавиши"""
+        if key in self.keys_pressed:
+            self.keys_pressed[key] = state
+
+class CornellBoxApp:
+    def __init__(self):
+        # Инициализация pygame
         pygame.init()
+        pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), 
+                                DOUBLEBUF | OPENGL)
+        pygame.display.set_caption("Корнуэльская комната - Компьютерная графика (WSAD + мышь)")
         
-        # Настройка OpenGL контекста
-        pygame.display.gl_set_attribute(pygame.GL_CONTEXT_MAJOR_VERSION, 3)
-        pygame.display.gl_set_attribute(pygame.GL_CONTEXT_MINOR_VERSION, 3)
-        pygame.display.gl_set_attribute(pygame.GL_CONTEXT_PROFILE_MASK, pygame.GL_CONTEXT_PROFILE_CORE)
-        
-        # Настройка окна
-        self.width = width
-        self.height = height
-        self.screen = pygame.display.set_mode((width, height), pygame.OPENGL | pygame.DOUBLEBUF)
-        self.ctx = moderngl.create_context()
+        # Скрываем курсор мыши
+        pygame.mouse.set_visible(False)
+        pygame.event.set_grab(True)  # Захватываем мышь
         
         # Настройка OpenGL
-        self.ctx.enable(moderngl.DEPTH_TEST)  # Включить тест глубины
-        self.ctx.enable(moderngl.BLEND)       # Включить прозрачность
-        self.ctx.blend_func = moderngl.SRC_ALPHA, moderngl.ONE_MINUS_SRC_ALPHA
+        glEnable(GL_DEPTH_TEST)
+        glClearColor(0.0, 0.0, 0.0, 1.0)  # Чёрный фон
         
-        # Инициализация списков перед загрузкой шейдеров
-        self.objects = {}  # Словарь для хранения объектов
-        self.render_objects = []  # Список всех объектов для рендеринга
-        self.object_states = {}  # Словарь состояний объектов
-        self.lights = []  # Список источников света
+        # Настройка проекции
+        glMatrixMode(GL_PROJECTION)
+        gluPerspective(60, SCREEN_WIDTH / SCREEN_HEIGHT, 0.1, 100.0)
         
-        # Загрузка шейдеров
-        self.load_shaders()
-        
-        # Создание камеры
-        self.camera = Camera(width, height)
-        
-        # Создание интерфейса
-        self.ui = UI(width, height)
-        
-        # Время для анимации
-        self.time = 0.0
+        # Инициализация камеры
+        self.camera = Camera()
         
         # Флаги управления
-        self.running = True     # Флаг работы приложения
-        self.show_ui = True     # Показывать ли интерфейс
+        self.running = True
+        self.clock = pygame.time.Clock()
         
-        # Цвет фона (окружения)
-        self.environment_color = [0.2, 0.2, 0.3]  # Темно-синий
-        
-        # Индекс текущего перемещаемого света
-        self.moving_light_index = 1  # Второй свет по умолчанию
-        
-        # Зеркальная стена (по умолчанию нет)
-        self.mirror_wall = None
-        
-        # Создание сцены
-        self.create_scene()
-        
-        # Создание источников света
-        self.create_lights()
-        
-    def load_shaders(self):
-        """Загрузка шейдеров (встроенные шейдеры)"""
-        # Вершинный шейдер
-        vertex_source = """
-        #version 330
-        in vec3 in_position;
-        in vec3 in_normal;
-        out vec3 v_position;
-        out vec3 v_normal;
-        uniform mat4 model;
-        uniform mat4 view;
-        uniform mat4 projection;
-        void main() {
-            vec4 world_pos = model * vec4(in_position, 1.0);
-            v_position = world_pos.xyz;
-            v_normal = mat3(transpose(inverse(model))) * in_normal;
-            gl_Position = projection * view * world_pos;
-        }
-        """
-        
-        # Фрагментный шейдер - ИСПРАВЛЕННАЯ ВЕРСИЯ
-        fragment_source = """
-        #version 330
-        in vec3 v_position;
-        in vec3 v_normal;
-        out vec4 frag_color;
-        
-        uniform vec3 material_diffuse;
-        uniform vec3 material_specular;
-        uniform float material_shininess;
-        uniform float material_alpha;
-        uniform vec3 material_emission;
-        
-        uniform vec3 light_positions[4];
-        uniform vec3 light_colors[4];
-        uniform float light_intensities[4];
-        uniform int num_lights;
-        uniform vec3 view_pos;
-        
-        void main() {
-            vec3 normal = normalize(v_normal);
-            vec3 view_dir = normalize(view_pos - v_position);
-            vec3 result = material_emission;
-            
-            // Проверяем количество активных источников света
-            int lights_to_process = min(num_lights, 4);
-            
-            for (int i = 0; i < lights_to_process; i++) {
-                vec3 light_dir = normalize(light_positions[i] - v_position);
-                float diff = max(dot(normal, light_dir), 0.0);
-                vec3 diffuse = light_colors[i] * diff * material_diffuse * light_intensities[i];
-                
-                // Простой расчет бликов
-                if (material_shininess > 0.0) {
-                    vec3 reflect_dir = reflect(-light_dir, normal);
-                    float spec = pow(max(dot(view_dir, reflect_dir), 0.0), material_shininess);
-                    vec3 specular = light_colors[i] * spec * material_specular * light_intensities[i];
-                    result += specular;
-                }
-                
-                result += diffuse;
-            }
-            
-            vec3 ambient = vec3(0.1) * material_diffuse;
-            result += ambient;
-            
-            frag_color = vec4(result, material_alpha);
-        }
-        """
-        
-        self.program = self.ctx.program(
-            vertex_shader=vertex_source,
-            fragment_shader=fragment_source
-        )
-        
-    def create_scene(self):
-        """Создание всей сцены Корнуэльской комнаты"""
-        room_size = 15.0    # Размер комнаты
-        wall_thickness = 0.2  # Толщина стен
-        
-        # 1. СОЗДАНИЕ КОМНАТЫ (6 стен)
-        # Материалы для стен
-        room_materials = {
-            'left': Material(diffuse=[0.9, 0.1, 0.1], name="Левая стена (красная)"),
-            'right': Material(diffuse=[0.1, 0.9, 0.1], name="Правая стена (зеленая)"),
-            'back': Material(diffuse=[0.9, 0.9, 0.9], name="Задняя стена (серая)"),
-            'floor': Material(diffuse=[0.8, 0.8, 0.8], name="Пол (серый)"),
-            'ceiling': Material(diffuse=[0.9, 0.9, 0.9], name="Потолок (белый)"),
-            'front': Material(diffuse=[0.0, 0.0, 0.0], name="Передняя стена (черная)"),  # Не видна
+        # Цвета для разных стен (как в классической Корнуэльской комнате)
+        self.wall_colors = {
+            'left': [0.8, 0.2, 0.2, 1.0],    # Красная стена
+            'right': [0.2, 0.8, 0.2, 1.0],   # Зелёная стена  
+            'back': [0.8, 0.8, 0.8, 1.0],    # Белая задняя стена
+            'floor': [0.8, 0.8, 0.8, 1.0],   # Серый пол
+            'ceiling': [0.8, 0.8, 0.8, 1.0], # Серый потолок
+            'front': [0.5, 0.5, 0.5, 1.0]    # Серая передняя стена
         }
         
-        # Конфигурация стен: позиция и размер
-        walls_config = {
-            'left': {
-                'pos': [-room_size/2 - wall_thickness/2, 0, -room_size/3], 
-                'size': [wall_thickness, room_size, room_size*2/3]
-            },
-            'right': {
-                'pos': [room_size/2 + wall_thickness/2, 0, -room_size/3], 
-                'size': [wall_thickness, room_size, room_size*2/3]
-            },
-            'back': {
-                'pos': [0, 0, -room_size*2/3 - wall_thickness/2], 
-                'size': [room_size, room_size, wall_thickness]
-            },
-            'floor': {
-                'pos': [0, -room_size/2 - wall_thickness/2, -room_size/3], 
-                'size': [room_size, wall_thickness, room_size*2/3]
-            },
-            'ceiling': {
-                'pos': [0, room_size/2 + wall_thickness/2, -room_size/3], 
-                'size': [room_size, wall_thickness, room_size*2/3]
-            },
-            'front': {
-                'pos': [0, 0, room_size/3 + wall_thickness/2], 
-                'size': [room_size, room_size, wall_thickness]
-            },
-        }
+        # Параметры зеркальной стены (изначально - задняя стена)
+        self.mirror_wall = 'back'  # 'left', 'right', 'back', 'floor', 'ceiling'
+        self.mirror_enabled = False
         
-        # Создание стен
-        for wall_name, config in walls_config.items():
-            wall = Cube(
-                ctx=self.ctx,
-                program=self.program,
-                position=config['pos'],
-                size=config['size'],
-                material=room_materials[wall_name]
-            )
-            self.objects[f'wall_{wall_name}'] = wall
-            self.render_objects.append(wall)
+        # Параметры второго источника света
+        self.light1_position = [0.5, 3.0, -2.0, 1.0]
+        self.light1_move_speed = 0.2
         
-        # 2. СОЗДАНИЕ ОСНОВНЫХ ОБЪЕКТОВ
+        # Объекты в комнате
+        self.objects = []
         
-        # ОБЪЕКТ 1: Большой куб (желтый, непрозрачный, неотражающий)
-        cube1_mat = Material(
-            diffuse=[1.0, 1.0, 0.0],  # Желтый цвет
-            specular=[0.0, 0.0, 0.0],  # Нет зеркальности
-            shininess=0.0,             # Без бликов
-            alpha=1.0,                 # Полностью непрозрачный
-            name="Большой куб"
-        )
-        self.objects['cube1'] = Cube(
-            self.ctx, self.program, 
-            position=[-5.0, -4.0, -8.0],  # Позиция в комнате
-            size=3.0,                     # Размер
-            material=cube1_mat
-        )
-        self.render_objects.append(self.objects['cube1'])
-        # Состояние объекта: зеркальность и прозрачность
-        self.object_states['cube1'] = {'mirror': False, 'transparent': False}
+        # Создаем тестовые объекты (все объекты БЕЗ спецэффектов по умолчанию)
+        self.create_test_objects()
         
-        # ОБЪЕКТ 2: Второй куб (голубой) - +1 балл
-        cube2_mat = Material(
-            diffuse=[0.0, 0.7, 1.0],  # Голубой цвет
-            specular=[0.0, 0.0, 0.0],
-            shininess=0.0,
-            alpha=1.0,
-            name="Голубой куб"
-        )
-        self.objects['cube2'] = Cube(
-            self.ctx, self.program,
-            position=[5.0, -4.0, -8.0],
-            size=2.5,
-            material=cube2_mat
-        )
-        self.render_objects.append(self.objects['cube2'])
-        self.object_states['cube2'] = {'mirror': False, 'transparent': False}
+        # Шрифт для текста (уменьшим для экономии места)
+        pygame.font.init()
+        self.font = pygame.font.SysFont('Arial', 13)  # Уменьшили с 14
+        self.small_font = pygame.font.SysFont('Arial', 11)  # Уменьшили с 12
         
-        # ОБЪЕКТ 3: Сфера (пурпурная) - +1 балл (первый объект другого вида)
-        sphere1_mat = Material(
-            diffuse=[1.0, 0.0, 1.0],  # Пурпурный цвет
-            specular=[0.0, 0.0, 0.0],
-            shininess=0.0,
-            alpha=1.0,
-            name="Пурпурная сфера"
-        )
-        self.objects['sphere1'] = Sphere(
-            self.ctx, self.program,
-            position=[0.0, 3.0, -10.0],
-            radius=2.0,               # Радиус сферы
-            material=sphere1_mat,
-            segments=32               # Количество сегментов (качество)
-        )
-        self.render_objects.append(self.objects['sphere1'])
-        self.object_states['sphere1'] = {'mirror': False, 'transparent': False}
-        
-        # ОБЪЕКТ 4: Маленькая сфера (оранжевая) - +1 балл (второй объект другого вида)
-        sphere2_mat = Material(
-            diffuse=[1.0, 0.5, 0.0],  # Оранжевый цвет
-            specular=[0.0, 0.0, 0.0],
-            shininess=0.0,
-            alpha=1.0,
-            name="Оранжевая сфера"
-        )
-        self.objects['sphere2'] = Sphere(
-            self.ctx, self.program,
-            position=[-2.0, -2.0, -5.0],
-            radius=1.5,
-            material=sphere2_mat,
-            segments=24
-        )
-        self.render_objects.append(self.objects['sphere2'])
-        self.object_states['sphere2'] = {'mirror': False, 'transparent': False}
-        
-    def create_lights(self):
-        """Создание источников света"""
-        # ИСТОЧНИК 1: Основной источник (точечный свет)
-        light1_mat = Material(
-            diffuse=[1.0, 1.0, 1.0],
-            specular=[1.0, 1.0, 1.0],
-            emission=[1.0, 1.0, 0.9],  # Слегка теплый свет
-            shininess=1.0,
-            alpha=1.0
-        )
-        
-        # Визуальное представление источника света (сфера)
-        self.light1_obj = Sphere(
-            self.ctx, self.program,
-            position=[0.0, 12.0, -5.0],  # Позиция вверху комнаты
-            radius=0.5,                   # Размер сферы
-            material=light1_mat,
-            segments=16
-        )
-        self.render_objects.append(self.light1_obj)
-        
-        # Данные для шейдера
-        self.lights.append({
-            'position': [0.0, 12.0, -5.0],
-            'color': [1.0, 1.0, 0.9],
-            'intensity': 1.2,
-            'enabled': True,
-            'name': 'Основной свет'
+        # Счетчик FPS
+        self.frame_count = 0
+        self.fps = 0
+        self.last_time = pygame.time.get_ticks()
+    
+    def create_test_objects(self):
+        """Создаем тестовые объекты в комнате (ВСЕ объекты без спецэффектов по умолчанию!)"""
+        # 1. Жёлтый куб - ПРАВЫЙ ПЕРЕДНИЙ УГОЛ
+        self.objects.append({
+            'id': 0,
+            'type': 'cube',
+            'position': [1.2, -1.5, -1.0],
+            'scale': [0.5, 0.5, 0.5],
+            'color': [0.9, 0.9, 0.0, 1.0],
+            'mirror': False,
+            'transparent': False,
+            'shininess': 50.0
         })
         
-        # ИСТОЧНИК 2: Дополнительный источник - +1 балл
-        light2_mat = Material(
-            diffuse=[1.0, 1.0, 1.0],
-            specular=[1.0, 1.0, 1.0],
-            emission=[0.8, 0.9, 1.0],  # Слегка холодный свет
-            shininess=1.0,
-            alpha=1.0
-        )
-        
-        self.light2_obj = Sphere(
-            self.ctx, self.program,
-            position=[-8.0, 5.0, -3.0],
-            radius=0.4,
-            material=light2_mat,
-            segments=16
-        )
-        self.render_objects.append(self.light2_obj)
-        
-        self.lights.append({
-            'position': [-8.0, 5.0, -3.0],
-            'color': [0.8, 0.9, 1.0],
-            'intensity': 0.8,
-            'enabled': True,
-            'name': 'Дополнительный свет',
-            'movable': True  # Можно перемещать
+        # 2. Синяя сфера - ЛЕВЫЙ СРЕДНИЙ ПЛАН
+        self.objects.append({
+            'id': 1,
+            'type': 'sphere',
+            'position': [-1.2, -1.0, -1.5],
+            'scale': [0.4, 0.4, 0.4],
+            'color': [0.2, 0.4, 0.9, 1.0],
+            'mirror': False,
+            'transparent': False,
+            'shininess': 100.0
         })
         
-    def update_materials(self):
-        """Обновление всех материалов на основе текущих состояний"""
-        # ОБНОВЛЕНИЕ ОБЪЕКТОВ
-        for obj_name, state in self.object_states.items():
-            if obj_name in self.objects:
-                obj = self.objects[obj_name]
-                
-                # Включение/выключение зеркальности
-                if state['mirror']:
-                    obj.material.specular = [0.8, 0.8, 0.8]  # Зеркальный цвет
-                    obj.material.shininess = 120.0           # Сила бликов
-                else:
-                    obj.material.specular = [0.0, 0.0, 0.0]  # Нет зеркальности
-                    obj.material.shininess = 0.0
-                
-                # Включение/выключение прозрачности
-                if state['transparent']:
-                    obj.material.alpha = 0.4  # Полупрозрачный
-                else:
-                    obj.material.alpha = 1.0  # Непрозрачный
+        # 3. Красный КУБ (НЕПРОЗРАЧНЫЙ по умолчанию!)
+        self.objects.append({
+            'id': 2,
+            'type': 'cube',
+            'position': [0.0, -1.2, -2.0],
+            'scale': [0.5, 0.5, 0.5],
+            'color': [0.9, 0.3, 0.3, 1.0],  # Альфа = 1.0 (непрозрачный)
+            'mirror': False,
+            'transparent': False,  # НЕ прозрачный по умолчанию
+            'shininess': 30.0
+        })
         
-        # ОБНОВЛЕНИЕ СТЕН (зеркальная стена)
-        for wall_key in ['wall_left', 'wall_right', 'wall_back', 'wall_floor', 'wall_ceiling']:
-            if wall_key in self.objects:
-                wall = self.objects[wall_key]
-                wall_name = wall_key.replace('wall_', '')
-                
-                if self.mirror_wall == wall_name:
-                    # Делаем стену зеркальной
-                    wall.material.specular = [0.9, 0.9, 0.9]
-                    wall.material.shininess = 200.0
-                else:
-                    # Возвращаем обычный материал
-                    wall.material.specular = [0.0, 0.0, 0.0]
-                    wall.material.shininess = 0.0
+        # 4. Зелёная сфера (НЕЗЕРКАЛЬНАЯ по умолчанию!)
+        self.objects.append({
+            'id': 3,
+            'type': 'sphere',
+            'position': [0.8, -0.3, -2.2],
+            'scale': [0.4, 0.4, 0.4],
+            'color': [0.2, 1.0, 0.2, 1.0],
+            'mirror': False,  # НЕ зеркальная по умолчанию
+            'transparent': False,
+            'shininess': 50.0
+        })
         
-        # ОБНОВЛЕНИЕ ИСТОЧНИКОВ СВЕТА
-        for i, light in enumerate(self.lights):
-            if i == 0:  # Первый свет
-                self.light1_obj.position = light['position']
-            elif i == 1:  # Второй свет
-                self.light2_obj.position = light['position']
+        # 5. Фиолетовая сфера
+        self.objects.append({
+            'id': 4,
+            'type': 'sphere',
+            'position': [-1.0, -1.5, -0.8],
+            'scale': [0.3, 0.3, 0.3],
+            'color': [0.9, 0.2, 0.9, 1.0],
+            'mirror': False,
+            'transparent': False,
+            'shininess': 75.0
+        })
+    
+    def toggle_mirror(self, obj_index):
+        """Включает/выключает зеркальность для объекта"""
+        if 0 <= obj_index < len(self.objects):
+            self.objects[obj_index]['mirror'] = not self.objects[obj_index]['mirror']
+    
+    def toggle_transparency(self, obj_index):
+        """Включает/выключает прозрачность для объекта"""
+        if 0 <= obj_index < len(self.objects):
+            self.objects[obj_index]['transparent'] = not self.objects[obj_index]['transparent']
+            if self.objects[obj_index]['transparent']:
+                self.objects[obj_index]['color'][3] = 0.6
+            else:
+                self.objects[obj_index]['color'][3] = 1.0
+    
+    def toggle_mirror_wall(self):
+        """Переключает зеркальную стену"""
+        walls = ['back', 'left', 'right', 'floor', 'ceiling']
+        current_index = walls.index(self.mirror_wall)
+        self.mirror_wall = walls[(current_index + 1) % len(walls)]
+    
+    def toggle_mirror_enabled(self):
+        """Включает/выключает зеркальную стену"""
+        self.mirror_enabled = not self.mirror_enabled
+    
+    def move_light1(self, direction):
+        """Перемещает второй источник света"""
+        if direction == 'up':
+            self.light1_position[1] += self.light1_move_speed
+        elif direction == 'down':
+            self.light1_position[1] -= self.light1_move_speed
+        elif direction == 'left':
+            self.light1_position[0] -= self.light1_move_speed
+        elif direction == 'right':
+            self.light1_position[0] += self.light1_move_speed
+        elif direction == 'forward':
+            self.light1_position[2] -= self.light1_move_speed
+        elif direction == 'backward':
+            self.light1_position[2] += self.light1_move_speed
+        
+        # Ограничиваем позицию внутри комнаты
+        room_half = 2.0
+        self.light1_position[0] = max(-room_half, min(room_half, self.light1_position[0]))
+        self.light1_position[1] = max(0.5, min(4.0, self.light1_position[1]))
+        self.light1_position[2] = max(-room_half, min(room_half, self.light1_position[2]))
+    
+    def create_wall(self, vertices, color, normal=None, wall_name=''):
+        """Создаёт одну стену комнаты с возможностью зеркальности"""
+        is_mirror_wall = (wall_name == self.mirror_wall and self.mirror_enabled)
+        
+        if normal:
+            glNormal3fv(normal)
+        
+        if is_mirror_wall:
+            # Для зеркальной стены - максимальный блеск
+            glMaterialfv(GL_FRONT, GL_DIFFUSE, [0.1, 0.1, 0.15, 0.9])
+            glMaterialfv(GL_FRONT, GL_AMBIENT, [0.05, 0.05, 0.1, 1.0])
+            glMaterialfv(GL_FRONT, GL_SPECULAR, [0.9, 0.9, 0.95, 1.0])
+            glMaterialf(GL_FRONT, GL_SHININESS, 128.0)
+            glColor4f(0.15, 0.15, 0.25, 0.8)
+        else:
+            # Обычная стена
+            glMaterialfv(GL_FRONT, GL_DIFFUSE, color)
+            glMaterialfv(GL_FRONT, GL_AMBIENT, [c * 0.2 for c in color[:3]] + [1.0])
+            glMaterialfv(GL_FRONT, GL_SPECULAR, [0.1, 0.1, 0.1, 1.0])
+            glMaterialf(GL_FRONT, GL_SHININESS, 10.0)
+            glColor3fv(color[:3])
+        
+        glBegin(GL_QUADS)
+        for vertex in vertices:
+            glVertex3fv(vertex)
+        glEnd()
+    
+    def draw_cube(self, obj):
+        """Рисует куб с учетом его свойств"""
+        pos = obj['position']
+        scale = obj['scale']
+        color = obj['color']
+        
+        glPushMatrix()
+        glTranslatef(pos[0], pos[1], pos[2])
+        glScalef(scale[0], scale[1], scale[2])
+        
+        # Настраиваем свойства материала
+        if obj['mirror']:
+            glMaterialfv(GL_FRONT, GL_DIFFUSE, [0.1, 0.1, 0.1, color[3]])
+            glMaterialfv(GL_FRONT, GL_AMBIENT, [0.1, 0.1, 0.1, color[3]])
+            glMaterialfv(GL_FRONT, GL_SPECULAR, [0.9, 0.9, 0.9, color[3]])
+            glMaterialf(GL_FRONT, GL_SHININESS, min(obj['shininess'], 128.0))
+            glColor4f(0.7, 0.7, 0.7, color[3])
+        else:
+            glMaterialfv(GL_FRONT, GL_DIFFUSE, color)
+            glMaterialfv(GL_FRONT, GL_AMBIENT, [c * 0.3 for c in color[:3]] + [color[3]])
+            glMaterialfv(GL_FRONT, GL_SPECULAR, [0.3, 0.3, 0.3, color[3]])
+            glMaterialf(GL_FRONT, GL_SHININESS, min(obj['shininess'], 128.0))
+            glColor4fv(color)
+        
+        # Если объект прозрачный
+        if obj['transparent']:
+            glEnable(GL_BLEND)
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+            glDepthMask(GL_FALSE)
+        else:
+            glDisable(GL_BLEND)
+            glDepthMask(GL_TRUE)
+        
+        # Рисуем куб
+        glBegin(GL_QUADS)
+        # Передняя грань
+        glNormal3f(0, 0, 1)
+        glVertex3f(-1, -1, 1); glVertex3f(1, -1, 1)
+        glVertex3f(1, 1, 1); glVertex3f(-1, 1, 1)
+        # Задняя грань
+        glNormal3f(0, 0, -1)
+        glVertex3f(-1, -1, -1); glVertex3f(-1, 1, -1)
+        glVertex3f(1, 1, -1); glVertex3f(1, -1, -1)
+        # Верхняя грань
+        glNormal3f(0, 1, 0)
+        glVertex3f(-1, 1, -1); glVertex3f(-1, 1, 1)
+        glVertex3f(1, 1, 1); glVertex3f(1, 1, -1)
+        # Нижняя грань
+        glNormal3f(0, -1, 0)
+        glVertex3f(-1, -1, -1); glVertex3f(1, -1, -1)
+        glVertex3f(1, -1, 1); glVertex3f(-1, -1, 1)
+        # Правая грань
+        glNormal3f(1, 0, 0)
+        glVertex3f(1, -1, -1); glVertex3f(1, 1, -1)
+        glVertex3f(1, 1, 1); glVertex3f(1, -1, 1)
+        # Левая грань
+        glNormal3f(-1, 0, 0)
+        glVertex3f(-1, -1, -1); glVertex3f(-1, -1, 1)
+        glVertex3f(-1, 1, 1); glVertex3f(-1, 1, -1)
+        glEnd()
+        
+        # Восстанавливаем настройки
+        glDisable(GL_BLEND)
+        glDepthMask(GL_TRUE)
+        glPopMatrix()
+    
+    def draw_sphere(self, obj, slices=16, stacks=16):
+        """Рисует сферу с учетом её свойств"""
+        pos = obj['position']
+        scale = obj['scale']
+        color = obj['color']
+        
+        glPushMatrix()
+        glTranslatef(pos[0], pos[1], pos[2])
+        glScalef(scale[0], scale[1], scale[2])
+        
+        # Настраиваем свойства материала
+        if obj['mirror']:
+            glMaterialfv(GL_FRONT, GL_DIFFUSE, [0.1, 0.1, 0.1, color[3]])
+            glMaterialfv(GL_FRONT, GL_AMBIENT, [0.1, 0.1, 0.1, color[3]])
+            glMaterialfv(GL_FRONT, GL_SPECULAR, [0.9, 0.9, 0.9, color[3]])
+            glMaterialf(GL_FRONT, GL_SHININESS, min(obj['shininess'], 128.0))
+            glColor4f(0.7, 0.7, 0.7, color[3])
+        else:
+            glMaterialfv(GL_FRONT, GL_DIFFUSE, color)
+            glMaterialfv(GL_FRONT, GL_AMBIENT, [c * 0.3 for c in color[:3]] + [color[3]])
+            glMaterialfv(GL_FRONT, GL_SPECULAR, [0.3, 0.3, 0.3, color[3]])
+            glMaterialf(GL_FRONT, GL_SHININESS, min(obj['shininess'], 128.0))
+            glColor4fv(color)
+        
+        # Если объект прозрачный
+        if obj['transparent']:
+            glEnable(GL_BLEND)
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+            glDepthMask(GL_FALSE)
+        else:
+            glDisable(GL_BLEND)
+            glDepthMask(GL_TRUE)
+        
+        # Рисуем сферу
+        for i in range(stacks):
+            lat0 = math.pi * (-0.5 + float(i) / stacks)
+            z0 = math.sin(lat0)
+            zr0 = math.cos(lat0)
+            
+            lat1 = math.pi * (-0.5 + float(i + 1) / stacks)
+            z1 = math.sin(lat1)
+            zr1 = math.cos(lat1)
+            
+            glBegin(GL_QUAD_STRIP)
+            for j in range(slices + 1):
+                lng = 2 * math.pi * float(j) / slices
+                x = math.cos(lng)
+                y = math.sin(lng)
+                
+                glNormal3f(x * zr0, y * zr0, z0)
+                glVertex3f(x * zr0, y * zr0, z0)
+                
+                glNormal3f(x * zr1, y * zr1, z1)
+                glVertex3f(x * zr1, y * zr1, z1)
+            glEnd()
+        
+        # Восстанавливаем настройки
+        glDisable(GL_BLEND)
+        glDepthMask(GL_TRUE)
+        glPopMatrix()
+    
+    def draw_cornell_box(self):
+        """Рисуем корнуэльскую комнату изнутри"""
+        room_size = 5.0
+        
+        # ВКЛЮЧАЕМ ОСВЕЩЕНИЕ
+        glEnable(GL_LIGHTING)
+        glEnable(GL_LIGHT0)
+        glEnable(GL_LIGHT1)
+        
+        # Настраиваем модель освещения
+        glLightModeli(GL_LIGHT_MODEL_LOCAL_VIEWER, GL_TRUE)
+        
+        # Первый источник света (основной)
+        light0_position = [0.0, 4.5, 0.0, 1.0]
+        light0_diffuse = [1.0, 1.0, 1.0, 1.0]
+        light0_ambient = [0.3, 0.3, 0.3, 1.0]
+        light0_specular = [1.0, 1.0, 1.0, 1.0]
+        
+        glLightfv(GL_LIGHT0, GL_POSITION, light0_position)
+        glLightfv(GL_LIGHT0, GL_DIFFUSE, light0_diffuse)
+        glLightfv(GL_LIGHT0, GL_AMBIENT, light0_ambient)
+        glLightfv(GL_LIGHT0, GL_SPECULAR, light0_specular)
+        
+        # Второй источник света
+        light1_diffuse = [0.6, 0.8, 0.6, 1.0]
+        light1_ambient = [0.1, 0.1, 0.1, 1.0]
+        light1_specular = [0.5, 0.6, 0.5, 1.0]
+        
+        glLightfv(GL_LIGHT1, GL_POSITION, self.light1_position)
+        glLightfv(GL_LIGHT1, GL_DIFFUSE, light1_diffuse)
+        glLightfv(GL_LIGHT1, GL_AMBIENT, light1_ambient)
+        glLightfv(GL_LIGHT1, GL_SPECULAR, light1_specular)
+        
+        # Включаем нормализацию
+        glEnable(GL_NORMALIZE)
+        
+        # Вершины комнаты
+        half_size = room_size / 2.0
+        
+        # Задняя стена
+        back_wall = [
+            [-half_size, -half_size, -half_size],
+            [half_size, -half_size, -half_size],
+            [half_size, half_size, -half_size],
+            [-half_size, half_size, -half_size]
+        ]
+        
+        # Пол
+        floor = [
+            [-half_size, -half_size, half_size],
+            [half_size, -half_size, half_size],
+            [half_size, -half_size, -half_size],
+            [-half_size, -half_size, -half_size]
+        ]
+        
+        # Потолок
+        ceiling = [
+            [-half_size, half_size, -half_size],
+            [half_size, half_size, -half_size],
+            [half_size, half_size, half_size],
+            [-half_size, half_size, half_size]
+        ]
+        
+        # Левая стена (красная)
+        left_wall = [
+            [-half_size, -half_size, half_size],
+            [-half_size, -half_size, -half_size],
+            [-half_size, half_size, -half_size],
+            [-half_size, half_size, half_size]
+        ]
+        
+        # Правая стена (зелёная)
+        right_wall = [
+            [half_size, -half_size, -half_size],
+            [half_size, -half_size, half_size],
+            [half_size, half_size, half_size],
+            [half_size, half_size, -half_size]
+        ]
+        
+        # ПЕРЕДНЯЯ СТЕНА (ПОЛНАЯ)
+        front_wall = [
+            [-half_size, -half_size, half_size],
+            [half_size, -half_size, half_size],
+            [half_size, half_size, half_size],
+            [-half_size, half_size, half_size]
+        ]
+        
+        # Рисуем стены
+        glPushMatrix()
+        
+        self.create_wall(back_wall, self.wall_colors['back'], 
+                        normal=[0, 0, 1], wall_name='back')
+        self.create_wall(floor, self.wall_colors['floor'], 
+                        normal=[0, 1, 0], wall_name='floor')
+        self.create_wall(ceiling, self.wall_colors['ceiling'], 
+                        normal=[0, -1, 0], wall_name='ceiling')
+        self.create_wall(left_wall, self.wall_colors['left'], 
+                        normal=[1, 0, 0], wall_name='left')
+        self.create_wall(right_wall, self.wall_colors['right'], 
+                        normal=[-1, 0, 0], wall_name='right')
+        self.create_wall(front_wall, self.wall_colors['front'], 
+                        normal=[0, 0, -1], wall_name='front')
+        
+        glPopMatrix()
+        
+        # Рисуем объекты
+        for obj in self.objects:
+            if not obj['transparent']:
+                if obj['type'] == 'cube':
+                    self.draw_cube(obj)
+                elif obj['type'] == 'sphere':
+                    self.draw_sphere(obj)
+        
+        for obj in self.objects:
+            if obj['transparent']:
+                if obj['type'] == 'cube':
+                    self.draw_cube(obj)
+                elif obj['type'] == 'sphere':
+                    self.draw_sphere(obj)
+        
+        # Источники света (точки)
+        glDisable(GL_LIGHTING)
+        
+        # Первый источник света
+        glPushMatrix()
+        glTranslatef(light0_position[0], light0_position[1], light0_position[2])
+        glColor3f(1.0, 1.0, 0.0)
+        glPointSize(12.0)
+        glBegin(GL_POINTS)
+        glVertex3f(0, 0, 0)
+        glEnd()
+        glPopMatrix()
+        
+        # Второй источник света
+        glPushMatrix()
+        glTranslatef(self.light1_position[0], self.light1_position[1], self.light1_position[2])
+        glColor3f(0.6, 1.0, 0.6)
+        glPointSize(10.0)
+        glBegin(GL_POINTS)
+        glVertex3f(0, 0, 0)
+        glEnd()
+        glPopMatrix()
+        
+        glEnable(GL_LIGHTING)
+    
+    def draw_info_panel(self):
+        """Рисует информационную панель с ОГРОМНЫМ размером"""
+        current_time = pygame.time.get_ticks()
+        self.frame_count += 1
+        
+        if current_time - self.last_time > 1000:
+            self.fps = self.frame_count
+            self.frame_count = 0
+            self.last_time = current_time
+        
+        # ОГРОМНАЯ ПАНЕЛЬ - 500x600 пикселей
+        panel_width = 500
+        panel_height = 600
+        
+        # Создаем поверхность для текста
+        info_surface = pygame.Surface((panel_width, panel_height), pygame.SRCALPHA)
+        info_surface.fill((0, 0, 0, 200))
+        
+        y_offset = 10
+        
+        # 1. ЗАГОЛОВОК
+        title_text = self.font.render("=== КОРНУЭЛЬСКАЯ КОМНАТА ===", True, (255, 255, 150))
+        info_surface.blit(title_text, (10, y_offset))
+        y_offset += 25
+        
+        # FPS и позиция камеры
+        fps_text = self.font.render(f"FPS: {self.fps}", True, (180, 255, 180))
+        info_surface.blit(fps_text, (10, y_offset))
+        y_offset += 20
+        
+        cam_text = self.small_font.render(f"Камера: X={self.camera.position[0]:.1f} Y={self.camera.position[1]:.1f} Z={self.camera.position[2]:.1f}", 
+                                         True, (180, 180, 255))
+        info_surface.blit(cam_text, (10, y_offset))
+        y_offset += 25
+        
+        # 2. УПРАВЛЕНИЕ КАМЕРОЙ
+        cam_title = self.font.render("=== УПРАВЛЕНИЕ КАМЕРОЙ ===", True, (255, 255, 200))
+        info_surface.blit(cam_title, (10, y_offset))
+        y_offset += 25
+        
+        cam_controls = [
+            "WSAD - движение вперед/назад/влево/вправо",
+            "Q/E - движение вверх/вниз",
+            "Мышь - вращение камеры",
+            "ESC - выход из программы"
+        ]
+        
+        for line in cam_controls:
+            text = self.small_font.render(line, True, (220, 220, 220))
+            info_surface.blit(text, (15, y_offset))
+            y_offset += 18
+        
+        y_offset += 10
+        
+        # 3. ОБЪЕКТЫ В КОМНАТЕ (компактнее)
+        objects_title = self.font.render("=== ОБЪЕКТЫ В КОМНАТЕ ===", True, (255, 255, 200))
+        info_surface.blit(objects_title, (10, y_offset))
+        y_offset += 25
+        
+        # Компактный список объектов в 2 колонки
+        for i, obj in enumerate(self.objects):
+            obj_type = "К" if obj['type'] == 'cube' else "С"
+            color_names = ["Ж", "Син", "Кр", "Зел", "Фил"]
+            color_name = color_names[i] if i < len(color_names) else f"{i+1}"
+            
+            mirror_char = "✓" if obj['mirror'] else "·"
+            trans_char = "✓" if obj['transparent'] else "·"
+            
+            # Цвет текста в зависимости от состояния
+            if obj['mirror']:
+                text_color = (100, 255, 100)  # Зелёный для зеркала
+            elif obj['transparent']:
+                text_color = (100, 200, 255)  # Голубой для прозрачности
+            else:
+                text_color = (200, 200, 200)  # Серый без эффектов
+            
+            # Компактный формат: "1.КЖ:М[✓]П[·]"
+            status_line = f"{i+1}.{obj_type}{color_name}:М[{mirror_char}]П[{trans_char}]"
+            
+            # Распределяем в 2 колонки
+            col = i % 2
+            row = i // 2
+            x_pos = 15 + (col * 240)
+            y_pos = y_offset + (row * 18)
+            
+            text = self.small_font.render(status_line, True, text_color)
+            info_surface.blit(text, (x_pos, y_pos))
+        
+        # Пересчитываем y_offset после объектов
+        rows_needed = (len(self.objects) + 1) // 2  # +1 для округления вверх
+        y_offset += rows_needed * 18 + 10
+        
+        # 4. УПРАВЛЕНИЕ ОБЪЕКТАМИ
+        obj_controls_title = self.font.render("=== УПРАВЛЕНИЕ ОБЪЕКТАМИ ===", True, (255, 255, 200))
+        info_surface.blit(obj_controls_title, (10, y_offset))
+        y_offset += 25
+        
+        obj_controls = [
+            "Клавиши 1-5: ЗЕРКАЛЬНОСТЬ объектов (1=жёлтый, 2=синий...)",
+            "Клавиши 6-0: ПРОЗРАЧНОСТЬ объектов (6=жёлтый, 7=синий...)",
+            "R: сбросить все настройки"
+        ]
+        
+        for line in obj_controls:
+            text = self.small_font.render(line, True, (220, 220, 220))
+            info_surface.blit(text, (15, y_offset))
+            y_offset += 18
+        
+        y_offset += 10
+        
+        # 5. ЗЕРКАЛЬНАЯ СТЕНА - ТЕПЕРЬ ВИДНО!
+        mirror_title = self.font.render("=== ЗЕРКАЛЬНАЯ СТЕНА ===", True, (255, 255, 200))
+        info_surface.blit(mirror_title, (10, y_offset))
+        y_offset += 25
+        
+        # Статус зеркальной стены
+        wall_status = "ВКЛЮЧЕНА" if self.mirror_enabled else "ВЫКЛЮЧЕНА"
+        status_color = (100, 255, 100) if self.mirror_enabled else (255, 100, 100)
+        
+        wall_info = [
+            f"Текущая стена: {self.mirror_wall}",
+            f"Состояние: {wall_status}",
+            "M: сменить зеркальную стену",
+            "N: включить/выключить зеркало"
+        ]
+        
+        for j, line in enumerate(wall_info):
+            if j == 1:  # Строка со статусом
+                text_color = status_color
+            else:
+                text_color = (220, 220, 220)
+            
+            text = self.small_font.render(line, True, text_color)
+            info_surface.blit(text, (15, y_offset))
+            y_offset += 18
+        
+        y_offset += 10
+        
+        # 6. УПРАВЛЕНИЕ ВТОРЫМ ИСТОЧНИКОМ СВЕТА - ТЕПЕРЬ ТОЧНО ВИДНО!
+        light_title = self.font.render("=== УПРАВЛЕНИЕ ВТОРЫМ СВЕТОМ ===", True, (255, 255, 200))
+        info_surface.blit(light_title, (10, y_offset))
+        y_offset += 25
+        
+        # Позиция света (очень важно!)
+        light_pos = f"ПОЗИЦИЯ СВЕТА: X={self.light1_position[0]:.1f} Y={self.light1_position[1]:.1f} Z={self.light1_position[2]:.1f}"
+        pos_text = self.font.render(light_pos, True, (180, 255, 180))
+        info_surface.blit(pos_text, (15, y_offset))
+        y_offset += 25
+        
+        # Управление светом - ВЫДЕЛЯЕМ КЛАВИШИ
+        light_controls = [
+            "U / J  -  двигать свет ВВЕРХ / ВНИЗ",
+            "H / K  -  двигать свет ВЛЕВО / ВПРАВО", 
+            "Y / I  -  двигать свет БЛИЖЕ / ДАЛЬШЕ"
+        ]
+        
+        for line in light_controls:
+            text = self.font.render(line, True, (180, 200, 255))
+            info_surface.blit(text, (20, y_offset))
+            y_offset += 25
+        
+        # ОТОБРАЖЕНИЕ ПАНЕЛИ
+        glDisable(GL_LIGHTING)
+        glDisable(GL_DEPTH_TEST)
+        
+        # Сохраняем текущие матрицы
+        glMatrixMode(GL_PROJECTION)
+        glPushMatrix()
+        glLoadIdentity()
+        gluOrtho2D(0, SCREEN_WIDTH, 0, SCREEN_HEIGHT)
+        
+        glMatrixMode(GL_MODELVIEW)
+        glPushMatrix()
+        glLoadIdentity()
+        
+        # Включаем смешивание для прозрачности
+        glEnable(GL_BLEND)
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+        
+        # Рисуем фон панели
+        glColor4f(0.0, 0.0, 0.0, 0.7)
+        glBegin(GL_QUADS)
+        glVertex2f(5, SCREEN_HEIGHT - 5 - panel_height)
+        glVertex2f(5 + panel_width, SCREEN_HEIGHT - 5 - panel_height)
+        glVertex2f(5 + panel_width, SCREEN_HEIGHT - 5)
+        glVertex2f(5, SCREEN_HEIGHT - 5)
+        glEnd()
+        
+        # Преобразуем поверхность Pygame в текстуру OpenGL
+        texture_data = pygame.image.tostring(info_surface, "RGBA", True)
+        width, height = info_surface.get_size()
+        
+        # Создаем и настраиваем текстуру
+        tex_id = glGenTextures(1)
+        glBindTexture(GL_TEXTURE_2D, tex_id)
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, 
+                    GL_RGBA, GL_UNSIGNED_BYTE, texture_data)
+        
+        # Включаем текстурирование
+        glEnable(GL_TEXTURE_2D)
+        glBindTexture(GL_TEXTURE_2D, tex_id)
+        
+        # Рисуем текстуру
+        glColor4f(1.0, 1.0, 1.0, 1.0)
+        glBegin(GL_QUADS)
+        glTexCoord2f(0.0, 0.0); glVertex2f(5, SCREEN_HEIGHT - 5 - height)
+        glTexCoord2f(1.0, 0.0); glVertex2f(5 + width, SCREEN_HEIGHT - 5 - height)
+        glTexCoord2f(1.0, 1.0); glVertex2f(5 + width, SCREEN_HEIGHT - 5)
+        glTexCoord2f(0.0, 1.0); glVertex2f(5, SCREEN_HEIGHT - 5)
+        glEnd()
+        
+        # Отключаем текстурирование
+        glDisable(GL_TEXTURE_2D)
+        glDisable(GL_BLEND)
+        
+        # Удаляем текстуру
+        glDeleteTextures([tex_id])
+        
+        # Восстанавливаем матрицы
+        glPopMatrix()
+        glMatrixMode(GL_PROJECTION)
+        glPopMatrix()
+        glMatrixMode(GL_MODELVIEW)
+        
+        # Восстанавливаем настройки
+        glEnable(GL_DEPTH_TEST)
+        glEnable(GL_LIGHTING)
     
     def handle_events(self):
-        """Обработка всех событий приложения"""
         for event in pygame.event.get():
-            # ВЫХОД ИЗ ПРИЛОЖЕНИЯ
             if event.type == pygame.QUIT:
                 self.running = False
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE:
+                    self.running = False
+                elif event.key in self.camera.keys_pressed:
+                    self.camera.set_key(event.key, True)
+                
+                # Управление свойствами объектов
+                elif event.key == pygame.K_1:
+                    self.toggle_mirror(0)
+                elif event.key == pygame.K_2:
+                    self.toggle_mirror(1)
+                elif event.key == pygame.K_3:
+                    self.toggle_mirror(2)
+                elif event.key == pygame.K_4:
+                    self.toggle_mirror(3)
+                elif event.key == pygame.K_5:
+                    self.toggle_mirror(4)
+                
+                elif event.key == pygame.K_6:
+                    self.toggle_transparency(0)
+                elif event.key == pygame.K_7:
+                    self.toggle_transparency(1)
+                elif event.key == pygame.K_8:
+                    self.toggle_transparency(2)
+                elif event.key == pygame.K_9:
+                    self.toggle_transparency(3)
+                elif event.key == pygame.K_0:
+                    self.toggle_transparency(4)
+                
+                # Управление зеркальной стеной
+                elif event.key == pygame.K_m:
+                    self.toggle_mirror_wall()
+                elif event.key == pygame.K_n:
+                    self.toggle_mirror_enabled()
+                
+                # Управление вторым источником света
+                elif event.key == pygame.K_u:
+                    self.move_light1('up')
+                elif event.key == pygame.K_j:
+                    self.move_light1('down')
+                elif event.key == pygame.K_h:
+                    self.move_light1('left')
+                elif event.key == pygame.K_k:
+                    self.move_light1('right')
+                elif event.key == pygame.K_y:
+                    self.move_light1('forward')
+                elif event.key == pygame.K_i:
+                    self.move_light1('backward')
+                
+                # Сброс настроек
+                elif event.key == pygame.K_r:
+                    self.reset_settings()
             
-            # ОБРАБОТКА ИНТЕРФЕЙСА
-            if self.show_ui:
-                ui_result = self.ui.handle_event(event)
-                if ui_result:
-                    self.handle_ui_action(ui_result)
+            elif event.type == pygame.KEYUP:
+                if event.key in self.camera.keys_pressed:
+                    self.camera.set_key(event.key, False)
             
-            # УПРАВЛЕНИЕ КАМЕРОЙ МЫШЬЮ
-            if event.type == pygame.MOUSEMOTION:
-                if pygame.mouse.get_pressed()[0]:  # Левая кнопка мыши
-                    dx, dy = event.rel  # Относительное движение
-                    self.camera.rotate(dx * 0.5, dy * 0.5)
-                elif pygame.mouse.get_pressed()[2]:  # Правая кнопка мыши
-                    dx, dy = event.rel
-                    self.camera.pan(dx * 0.01, dy * 0.01)
-            
-            # ПРОКРУТКА КОЛЕСИКА МЫШИ
-            if event.type == pygame.MOUSEWHEEL:
-                self.camera.zoom(event.y * 2.0)  # event.y = направление прокрутки
-            
-            # НАЖАТИЯ КЛАВИШ
-            if event.type == pygame.KEYDOWN:
-                self.handle_keydown(event)
+            elif event.type == pygame.MOUSEMOTION:
+                x, y = event.pos
+                center_x, center_y = SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2
+                
+                if x != center_x or y != center_y:
+                    dx, dy = x - center_x, y - center_y
+                    self.camera.process_mouse_movement(dx, -dy)
+                    pygame.mouse.set_pos((center_x, center_y))
     
-    def handle_keydown(self, event):
-        """Обработка нажатий клавиш"""
-        # БЫСТРЫЕ КЛАВИШИ ДЛЯ ОТЛАДКИ
-        if event.key == pygame.K_ESCAPE:
-            self.running = False
-        elif event.key == pygame.K_u:
-            self.show_ui = not self.show_ui  # Показать/скрыть UI
-        elif event.key == pygame.K_r:
-            self.camera.reset()  # Сброс камеры
+    def reset_settings(self):
+        """Сбрасывает все настройки к начальным"""
+        for obj in self.objects:
+            obj['mirror'] = False
+            obj['transparent'] = False
+            obj['color'][3] = 1.0
         
-        # УПРАВЛЕНИЕ ПЕРЕМЕЩАЕМЫМ ИСТОЧНИКОМ СВЕТА
-        if self.lights and self.moving_light_index < len(self.lights):
-            light = self.lights[self.moving_light_index]
-            speed = 0.5  # Скорость перемещения
-            
-            if event.key == pygame.K_w:
-                light['position'][2] -= speed  # Вперед
-            elif event.key == pygame.K_s:
-                light['position'][2] += speed  # Назад
-            elif event.key == pygame.K_a:
-                light['position'][0] -= speed  # Влево
-            elif event.key == pygame.K_d:
-                light['position'][0] += speed  # Вправо
-            elif event.key == pygame.K_q:
-                light['position'][1] += speed  # Вверх
-            elif event.key == pygame.K_e:
-                light['position'][1] -= speed  # Вниз
-            elif event.key == pygame.K_PLUS or event.key == pygame.K_EQUALS:
-                light['intensity'] = min(2.0, light['intensity'] + 0.1)  # Увеличить интенсивность
-            elif event.key == pygame.K_MINUS:
-                light['intensity'] = max(0.1, light['intensity'] - 0.1)  # Уменьшить интенсивность
-        
-        # ПЕРЕКЛЮЧЕНИЕ МЕЖДУ ИСТОЧНИКАМИ СВЕТА
-        if event.key == pygame.K_TAB and self.lights:
-            self.moving_light_index = (self.moving_light_index + 1) % len(self.lights)
-    
-    def handle_ui_action(self, action):
-        """Обработка действий из интерфейса"""
-        if action.startswith('toggle_mirror_'):
-            # Включить/выключить зеркальность объекта
-            obj_name = action.replace('toggle_mirror_', '')
-            if obj_name in self.object_states:
-                self.object_states[obj_name]['mirror'] = not self.object_states[obj_name]['mirror']
-        
-        elif action.startswith('toggle_transparent_'):
-            # Включить/выключить прозрачность объекта
-            obj_name = action.replace('toggle_transparent_', '')
-            if obj_name in self.object_states:
-                self.object_states[obj_name]['transparent'] = not self.object_states[obj_name]['transparent']
-        
-        elif action.startswith('mirror_wall_'):
-            # Выбор зеркальной стены
-            wall_name = action.replace('mirror_wall_', '')
-            if wall_name == 'none':
-                self.mirror_wall = None
-            else:
-                self.mirror_wall = wall_name
-        
-        elif action == 'toggle_light1' and len(self.lights) > 0:
-            # Включить/выключить первый свет
-            self.lights[0]['enabled'] = not self.lights[0]['enabled']
-        
-        elif action == 'toggle_light2' and len(self.lights) > 1:
-            # Включить/выключить второй свет
-            self.lights[1]['enabled'] = not self.lights[1]['enabled']
-        
-        elif action == 'switch_moving_light' and self.lights:
-            # Переключить перемещаемый свет
-            self.moving_light_index = (self.moving_light_index + 1) % len(self.lights)
-        
-        elif action == 'reset_camera':
-            # Сброс камеры
-            self.camera.reset()
-        
-        elif action == 'toggle_ui':
-            # Показать/скрыть интерфейс
-            self.show_ui = not self.show_ui
-    
-    def update(self, dt):
-        """Обновление состояния сцены"""
-        self.time += dt  # Увеличиваем время
-        
-        # ЛЕГКАЯ АНИМАЦИЯ ОБЪЕКТОВ (вращение)
-        rotation_speed = 0.3
-        if 'cube1' in self.objects:
-            self.objects['cube1'].rotation[1] = self.time * rotation_speed  # Вращение по Y
-        
-        if 'sphere1' in self.objects:
-            self.objects['sphere1'].rotation[0] = self.time * rotation_speed * 0.7  # Вращение по X
-            self.objects['sphere1'].rotation[1] = self.time * rotation_speed * 0.5  # Вращение по Y
-        
-        # Обновление материалов
-        self.update_materials()
-        
-        # Обновление интерфейса
-        self.ui.update(self.object_states, self.lights, self.moving_light_index, self.mirror_wall)
+        self.mirror_wall = 'back'
+        self.mirror_enabled = False
+        self.light1_position = [0.5, 3.0, -2.0, 1.0]
     
     def render(self):
-        """Рендеринг всей сцены"""
-        # ОЧИСТКА ЭКРАНА
-        self.ctx.clear(*self.environment_color)
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)  # ИСПРАВЛЕНО: было Бит, стало BIT
         
-        # ПОЛУЧЕНИЕ МАТРИЦ КАМЕРЫ
-        view_matrix = self.camera.get_view_matrix()
-        projection_matrix = self.camera.get_projection_matrix()
+        glMatrixMode(GL_MODELVIEW)
+        glLoadIdentity()
+        self.camera.get_view_matrix()
         
-        # УСТАНОВКА UNIFORM-ПЕРЕМЕННЫХ В ШЕЙДЕР
-        self.program['view'].write(view_matrix.tobytes())
-        self.program['projection'].write(projection_matrix.tobytes())
-        self.program['view_pos'].write(np.array(self.camera.position, dtype='f4').tobytes())
+        # Обработка клавиш для движения камеры
+        keys = pygame.key.get_pressed()
+        if keys[pygame.K_w]:
+            self.camera.position += self.camera.front * self.camera.movement_speed
+        if keys[pygame.K_s]:
+            self.camera.position -= self.camera.front * self.camera.movement_speed
+        if keys[pygame.K_a]:
+            self.camera.position -= self.camera.right * self.camera.movement_speed
+        if keys[pygame.K_d]:
+            self.camera.position += self.camera.right * self.camera.movement_speed
+        if keys[pygame.K_q]:
+            self.camera.position += self.camera.up * self.camera.movement_speed
+        if keys[pygame.K_e]:
+            self.camera.position -= self.camera.up * self.camera.movement_speed
         
-        # ПОДГОТОВКА ДАННЫХ ОБ ИСТОЧНИКАХ СВЕТА
-        enabled_lights = [light for light in self.lights if light['enabled']]
-        num_lights = min(len(enabled_lights), 4)  # Максимум 4 источника света
+        self.draw_cornell_box()
+        self.draw_info_panel()
         
-        if num_lights > 0:
-            # Подготавливаем массивы фиксированного размера (4 источника)
-            light_positions = np.zeros((4, 3), dtype='f4')
-            light_colors = np.zeros((4, 3), dtype='f4')
-            light_intensities = np.zeros(4, dtype='f4')
-            
-            # Заполняем данные
-            for i in range(num_lights):
-                light_positions[i] = enabled_lights[i]['position']
-                light_colors[i] = enabled_lights[i]['color']
-                light_intensities[i] = enabled_lights[i]['intensity']
-            
-            # Передача данных в шейдер
-            self.program['num_lights'].value = num_lights
-            self.program['light_positions'].write(light_positions.tobytes())
-            self.program['light_colors'].write(light_colors.tobytes())
-            self.program['light_intensities'].write(light_intensities.tobytes())
-        else:
-            self.program['num_lights'].value = 0  # Нет активных источников света
-        
-        # РЕНДЕРИНГ ВСЕХ ОБЪЕКТОВ
-        for obj in self.render_objects:
-            obj.render(self.program)
-        
-        # РЕНДЕРИНГ ИНТЕРФЕЙСА (поверх 3D)
-        if self.show_ui:
-            self.ui.render(self.screen)
-        
-        # ОБНОВЛЕНИЕ ДИСПЛЕЯ
         pygame.display.flip()
     
     def run(self):
-        """Главный цикл приложения"""
-        clock = pygame.time.Clock()
+        pygame.mouse.set_pos((SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2))
         
         while self.running:
-            dt = clock.tick(60) / 1000.0  # Дельта времени в секундах (60 FPS)
-            
-            # ОБРАБОТКА СОБЫТИЙ
             self.handle_events()
-            
-            # ОБНОВЛЕНИЕ СОСТОЯНИЯ
-            self.update(dt)
-            
-            # РЕНДЕРИНГ
             self.render()
+            self.clock.tick(FPS)
         
-        # ЗАВЕРШЕНИЕ ПРИЛОЖЕНИЯ
         pygame.quit()
-        sys.exit()
 
-# ЗАПУСК ПРИЛОЖЕНИЯ
-if __name__ == '__main__':
-    app = CornellBox()
+if __name__ == "__main__":
+    app = CornellBoxApp()
     app.run()

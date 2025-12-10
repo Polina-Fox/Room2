@@ -7,28 +7,8 @@
       "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:main.py||{8B382828-6202-11D1-8870-0000F87579D2}"
     },
     {
-      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Users\\TROLL2\\Documents\\GitHub\\Room2\\objects.py||{8B382828-6202-11D1-8870-0000F87579D2}",
-      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:objects.py||{8B382828-6202-11D1-8870-0000F87579D2}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Users\\TROLL2\\Documents\\GitHub\\Room2\\shaders\\fragment.glsl||{8B382828-6202-11D1-8870-0000F87579D2}",
-      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:shaders\\fragment.glsl||{8B382828-6202-11D1-8870-0000F87579D2}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Users\\TROLL2\\Documents\\GitHub\\Room2\\shaders\\vertex.glsl||{8B382828-6202-11D1-8870-0000F87579D2}",
-      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:shaders\\vertex.glsl||{8B382828-6202-11D1-8870-0000F87579D2}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Users\\TROLL2\\Documents\\GitHub\\Room2\\ui.py||{8B382828-6202-11D1-8870-0000F87579D2}",
-      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:ui.py||{8B382828-6202-11D1-8870-0000F87579D2}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Users\\TROLL2\\Documents\\GitHub\\Room2\\camera.py||{8B382828-6202-11D1-8870-0000F87579D2}",
-      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:camera.py||{8B382828-6202-11D1-8870-0000F87579D2}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Users\\TROLL2\\Documents\\GitHub\\Room2\\materials.py||{8B382828-6202-11D1-8870-0000F87579D2}",
-      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:materials.py||{8B382828-6202-11D1-8870-0000F87579D2}"
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Users\\TROLL2\\Documents\\GitHub\\Room2\\requirements.txt||{8B382828-6202-11D1-8870-0000F87579D2}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:requirements.txt||{8B382828-6202-11D1-8870-0000F87579D2}"
     },
     {
       "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Users\\TROLL2\\Documents\\GitHub\\Room2\\README.md||{EFC0BB08-EA7D-40C6-A696-C870411A895B}",
@@ -42,51 +22,8 @@
       "DocumentGroups": [
         {
           "DockedWidth": 200,
-          "SelectedChildIndex": 4,
+          "SelectedChildIndex": 0,
           "Children": [
-            {
-              "$type": "Bookmark",
-              "Name": "ST:0:0:{e1b7d1f8-9b3c-49b1-8f4f-bfc63a88835d}"
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 4,
-              "Title": "ui.py",
-              "DocumentMoniker": "C:\\Users\\TROLL2\\Documents\\GitHub\\Room2\\ui.py",
-              "RelativeDocumentMoniker": "ui.py",
-              "ToolTip": "C:\\Users\\TROLL2\\Documents\\GitHub\\Room2\\ui.py",
-              "RelativeToolTip": "ui.py",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.002457|",
-              "WhenOpened": "2025-12-09T21:35:02.202Z",
-              "EditorCaption": ""
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 3,
-              "Title": "vertex.glsl",
-              "DocumentMoniker": "C:\\Users\\TROLL2\\Documents\\GitHub\\Room2\\shaders\\vertex.glsl",
-              "RelativeDocumentMoniker": "shaders\\vertex.glsl",
-              "ToolTip": "C:\\Users\\TROLL2\\Documents\\GitHub\\Room2\\shaders\\vertex.glsl",
-              "RelativeToolTip": "shaders\\vertex.glsl",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAABEAAAABAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001001|",
-              "WhenOpened": "2025-12-09T21:29:14.889Z",
-              "EditorCaption": ""
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 2,
-              "Title": "fragment.glsl",
-              "DocumentMoniker": "C:\\Users\\TROLL2\\Documents\\GitHub\\Room2\\shaders\\fragment.glsl",
-              "RelativeDocumentMoniker": "shaders\\fragment.glsl",
-              "ToolTip": "C:\\Users\\TROLL2\\Documents\\GitHub\\Room2\\shaders\\fragment.glsl",
-              "RelativeToolTip": "shaders\\fragment.glsl",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAABEAAAAPAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001001|",
-              "WhenOpened": "2025-12-09T21:29:42.594Z",
-              "EditorCaption": ""
-            },
             {
               "$type": "Document",
               "DocumentIndex": 0,
@@ -95,53 +32,32 @@
               "RelativeDocumentMoniker": "main.py",
               "ToolTip": "C:\\Users\\TROLL2\\Documents\\GitHub\\Room2\\main.py",
               "RelativeToolTip": "main.py",
-              "ViewState": "AgIAACQCAAAAAAAAAAAAwEICAAANAAAAAAAAAA==",
+              "ViewState": "AgIAAIgDAAAAAAAAAAAAwKYDAAANAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.002457|",
-              "WhenOpened": "2025-12-09T21:28:20.36Z",
+              "WhenOpened": "2025-12-10T18:56:48.967Z",
+              "IsPinned": true,
               "EditorCaption": ""
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:0:0:{e1b7d1f8-9b3c-49b1-8f4f-bfc63a88835d}"
             },
             {
               "$type": "Document",
               "DocumentIndex": 1,
-              "Title": "objects.py",
-              "DocumentMoniker": "C:\\Users\\TROLL2\\Documents\\GitHub\\Room2\\objects.py",
-              "RelativeDocumentMoniker": "objects.py",
-              "ToolTip": "C:\\Users\\TROLL2\\Documents\\GitHub\\Room2\\objects.py",
-              "RelativeToolTip": "objects.py",
-              "ViewState": "AgIAABYBAAAAAAAAAAAAwDQBAAAZAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.002457|",
-              "WhenOpened": "2025-12-09T21:29:58.344Z",
+              "Title": "requirements.txt",
+              "DocumentMoniker": "C:\\Users\\TROLL2\\Documents\\GitHub\\Room2\\requirements.txt",
+              "RelativeDocumentMoniker": "requirements.txt",
+              "ToolTip": "C:\\Users\\TROLL2\\Documents\\GitHub\\Room2\\requirements.txt",
+              "RelativeToolTip": "requirements.txt",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAMAAAANAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.003109|",
+              "WhenOpened": "2025-12-10T18:57:40.519Z",
               "EditorCaption": ""
             },
             {
               "$type": "Document",
-              "DocumentIndex": 5,
-              "Title": "camera.py",
-              "DocumentMoniker": "C:\\Users\\TROLL2\\Documents\\GitHub\\Room2\\camera.py",
-              "RelativeDocumentMoniker": "camera.py",
-              "ToolTip": "C:\\Users\\TROLL2\\Documents\\GitHub\\Room2\\camera.py",
-              "RelativeToolTip": "camera.py",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAcAAAAAAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.002457|",
-              "WhenOpened": "2025-12-09T21:34:50.051Z",
-              "EditorCaption": ""
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 6,
-              "Title": "materials.py",
-              "DocumentMoniker": "C:\\Users\\TROLL2\\Documents\\GitHub\\Room2\\materials.py",
-              "RelativeDocumentMoniker": "materials.py",
-              "ToolTip": "C:\\Users\\TROLL2\\Documents\\GitHub\\Room2\\materials.py",
-              "RelativeToolTip": "materials.py",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.002457|",
-              "WhenOpened": "2025-12-09T21:30:14.387Z",
-              "EditorCaption": ""
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 7,
+              "DocumentIndex": 2,
               "Title": "README.md",
               "DocumentMoniker": "C:\\Users\\TROLL2\\Documents\\GitHub\\Room2\\README.md",
               "RelativeDocumentMoniker": "README.md",
