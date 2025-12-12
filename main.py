@@ -156,9 +156,43 @@ class CornellBoxApp:
         self.mirror_wall = 'back'  # 'left', 'right', 'back', 'floor', 'ceiling'
         self.mirror_enabled = False
         
-        # Параметры второго источника света
-        self.light1_position = [0.5, 3.0, -2.0, 1.0]
-        self.light1_move_speed = 0.2
+        # ИСТОЧНИКИ СВЕТА (теперь их 3!)
+        self.lights = [
+            {
+                'id': 0,
+                'position': [0.0, 4.5, 0.0, 1.0],  # Основной свет (сверху)
+                'diffuse': [1.0, 1.0, 1.0, 1.0],
+                'ambient': [0.3, 0.3, 0.3, 1.0],
+                'specular': [1.0, 1.0, 1.0, 1.0],
+                'color': (1.0, 1.0, 0.0),  # Жёлтый
+                'enabled': True,
+                'movable': False  # Основной свет не двигается
+            },
+            {
+                'id': 1,
+                'position': [0.5, 3.0, -2.0, 1.0],  # Второй свет
+                'diffuse': [0.6, 0.8, 0.6, 1.0],  # Зелёноватый
+                'ambient': [0.1, 0.1, 0.1, 1.0],
+                'specular': [0.5, 0.6, 0.5, 1.0],
+                'color': (0.6, 1.0, 0.6),  # Светло-зелёный
+                'enabled': True,
+                'movable': True
+            },
+            {
+                'id': 2,
+                'position': [-1.5, 2.0, -1.5, 1.0],  # Третий свет (новый!)
+                'diffuse': [0.8, 0.6, 0.8, 1.0],  # Фиолетовый
+                'ambient': [0.1, 0.1, 0.1, 1.0],
+                'specular': [0.6, 0.5, 0.6, 1.0],
+                'color': (0.8, 0.6, 1.0),  # Фиолетовый
+                'enabled': True,
+                'movable': True
+            }
+        ]
+        
+        # Текущий выбранный источник света (для управления)
+        self.selected_light = 1  # Начинаем со второго света
+        self.light_move_speed = 0.2
         
         # Объекты в комнате
         self.objects = []
@@ -166,10 +200,10 @@ class CornellBoxApp:
         # Создаем тестовые объекты (все объекты БЕЗ спецэффектов по умолчанию)
         self.create_test_objects()
         
-        # Шрифт для текста (уменьшим для экономии места)
+        # Шрифт для текста
         pygame.font.init()
-        self.font = pygame.font.SysFont('Arial', 13)  # Уменьшили с 14
-        self.small_font = pygame.font.SysFont('Arial', 11)  # Уменьшили с 12
+        self.font = pygame.font.SysFont('Arial', 13)
+        self.small_font = pygame.font.SysFont('Arial', 11)
         
         # Счетчик FPS
         self.frame_count = 0
@@ -262,26 +296,42 @@ class CornellBoxApp:
         """Включает/выключает зеркальную стену"""
         self.mirror_enabled = not self.mirror_enabled
     
-    def move_light1(self, direction):
-        """Перемещает второй источник света"""
+    def toggle_light_enabled(self, light_index):
+        """Включает/выключает источник света"""
+        if 0 <= light_index < len(self.lights):
+            self.lights[light_index]['enabled'] = not self.lights[light_index]['enabled']
+    
+    def select_next_light(self):
+        """Переключает на следующий источник света для управления"""
+        movable_lights = [i for i, light in enumerate(self.lights) if light['movable']]
+        if movable_lights:
+            current_index = movable_lights.index(self.selected_light)
+            self.selected_light = movable_lights[(current_index + 1) % len(movable_lights)]
+    
+    def move_selected_light(self, direction):
+        """Перемещает выбранный источник света"""
+        light = self.lights[self.selected_light]
+        if not light['movable']:
+            return
+        
         if direction == 'up':
-            self.light1_position[1] += self.light1_move_speed
+            light['position'][1] += self.light_move_speed
         elif direction == 'down':
-            self.light1_position[1] -= self.light1_move_speed
+            light['position'][1] -= self.light_move_speed
         elif direction == 'left':
-            self.light1_position[0] -= self.light1_move_speed
+            light['position'][0] -= self.light_move_speed
         elif direction == 'right':
-            self.light1_position[0] += self.light1_move_speed
+            light['position'][0] += self.light_move_speed
         elif direction == 'forward':
-            self.light1_position[2] -= self.light1_move_speed
+            light['position'][2] -= self.light_move_speed
         elif direction == 'backward':
-            self.light1_position[2] += self.light1_move_speed
+            light['position'][2] += self.light_move_speed
         
         # Ограничиваем позицию внутри комнаты
         room_half = 2.0
-        self.light1_position[0] = max(-room_half, min(room_half, self.light1_position[0]))
-        self.light1_position[1] = max(0.5, min(4.0, self.light1_position[1]))
-        self.light1_position[2] = max(-room_half, min(room_half, self.light1_position[2]))
+        light['position'][0] = max(-room_half, min(room_half, light['position'][0]))
+        light['position'][1] = max(0.5, min(4.5, light['position'][1]))
+        light['position'][2] = max(-room_half, min(room_half, light['position'][2]))
     
     def create_wall(self, vertices, color, normal=None, wall_name=''):
         """Создаёт одну стену комнаты с возможностью зеркальности"""
@@ -443,32 +493,22 @@ class CornellBoxApp:
         
         # ВКЛЮЧАЕМ ОСВЕЩЕНИЕ
         glEnable(GL_LIGHTING)
-        glEnable(GL_LIGHT0)
-        glEnable(GL_LIGHT1)
         
         # Настраиваем модель освещения
         glLightModeli(GL_LIGHT_MODEL_LOCAL_VIEWER, GL_TRUE)
         
-        # Первый источник света (основной)
-        light0_position = [0.0, 4.5, 0.0, 1.0]
-        light0_diffuse = [1.0, 1.0, 1.0, 1.0]
-        light0_ambient = [0.3, 0.3, 0.3, 1.0]
-        light0_specular = [1.0, 1.0, 1.0, 1.0]
-        
-        glLightfv(GL_LIGHT0, GL_POSITION, light0_position)
-        glLightfv(GL_LIGHT0, GL_DIFFUSE, light0_diffuse)
-        glLightfv(GL_LIGHT0, GL_AMBIENT, light0_ambient)
-        glLightfv(GL_LIGHT0, GL_SPECULAR, light0_specular)
-        
-        # Второй источник света
-        light1_diffuse = [0.6, 0.8, 0.6, 1.0]
-        light1_ambient = [0.1, 0.1, 0.1, 1.0]
-        light1_specular = [0.5, 0.6, 0.5, 1.0]
-        
-        glLightfv(GL_LIGHT1, GL_POSITION, self.light1_position)
-        glLightfv(GL_LIGHT1, GL_DIFFUSE, light1_diffuse)
-        glLightfv(GL_LIGHT1, GL_AMBIENT, light1_ambient)
-        glLightfv(GL_LIGHT1, GL_SPECULAR, light1_specular)
+        # Включаем все источники света
+        for i, light in enumerate(self.lights):
+            if light['enabled']:
+                glEnable(GL_LIGHT0 + i)
+                
+                # Настраиваем источник света
+                glLightfv(GL_LIGHT0 + i, GL_POSITION, light['position'])
+                glLightfv(GL_LIGHT0 + i, GL_DIFFUSE, light['diffuse'])
+                glLightfv(GL_LIGHT0 + i, GL_AMBIENT, light['ambient'])
+                glLightfv(GL_LIGHT0 + i, GL_SPECULAR, light['specular'])
+            else:
+                glDisable(GL_LIGHT0 + i)
         
         # Включаем нормализацию
         glEnable(GL_NORMALIZE)
@@ -560,30 +600,29 @@ class CornellBoxApp:
         # Источники света (точки)
         glDisable(GL_LIGHTING)
         
-        # Первый источник света
-        glPushMatrix()
-        glTranslatef(light0_position[0], light0_position[1], light0_position[2])
-        glColor3f(1.0, 1.0, 0.0)
-        glPointSize(12.0)
-        glBegin(GL_POINTS)
-        glVertex3f(0, 0, 0)
-        glEnd()
-        glPopMatrix()
-        
-        # Второй источник света
-        glPushMatrix()
-        glTranslatef(self.light1_position[0], self.light1_position[1], self.light1_position[2])
-        glColor3f(0.6, 1.0, 0.6)
-        glPointSize(10.0)
-        glBegin(GL_POINTS)
-        glVertex3f(0, 0, 0)
-        glEnd()
-        glPopMatrix()
+        # Рисуем все источники света
+        for i, light in enumerate(self.lights):
+            if light['enabled']:
+                glPushMatrix()
+                glTranslatef(light['position'][0], light['position'][1], light['position'][2])
+                
+                # Если это выбранный свет - делаем его больше и ярче
+                if i == self.selected_light and light['movable']:
+                    glColor3f(1.0, 1.0, 1.0)  # Белый для выделенного
+                    glPointSize(14.0)
+                else:
+                    glColor3f(light['color'][0], light['color'][1], light['color'][2])
+                    glPointSize(10.0)
+                
+                glBegin(GL_POINTS)
+                glVertex3f(0, 0, 0)
+                glEnd()
+                glPopMatrix()
         
         glEnable(GL_LIGHTING)
     
     def draw_info_panel(self):
-        """Рисует информационную панель с ОГРОМНЫМ размером"""
+        """Рисует информационную панель"""
         current_time = pygame.time.get_ticks()
         self.frame_count += 1
         
@@ -592,9 +631,9 @@ class CornellBoxApp:
             self.frame_count = 0
             self.last_time = current_time
         
-        # ОГРОМНАЯ ПАНЕЛЬ - 500x600 пикселей
-        panel_width = 500
-        panel_height = 600
+        # УВЕЛИЧЕННАЯ ПАНЕЛЬ для новой информации
+        panel_width = 550  # Ещё больше
+        panel_height = 650  # Ещё больше
         
         # Создаем поверхность для текста
         info_surface = pygame.Surface((panel_width, panel_height), pygame.SRCALPHA)
@@ -671,7 +710,7 @@ class CornellBoxApp:
             info_surface.blit(text, (x_pos, y_pos))
         
         # Пересчитываем y_offset после объектов
-        rows_needed = (len(self.objects) + 1) // 2  # +1 для округления вверх
+        rows_needed = (len(self.objects) + 1) // 2
         y_offset += rows_needed * 18 + 10
         
         # 4. УПРАВЛЕНИЕ ОБЪЕКТАМИ
@@ -692,7 +731,7 @@ class CornellBoxApp:
         
         y_offset += 10
         
-        # 5. ЗЕРКАЛЬНАЯ СТЕНА - ТЕПЕРЬ ВИДНО!
+        # 5. ЗЕРКАЛЬНАЯ СТЕНА
         mirror_title = self.font.render("=== ЗЕРКАЛЬНАЯ СТЕНА ===", True, (255, 255, 200))
         info_surface.blit(mirror_title, (10, y_offset))
         y_offset += 25
@@ -709,7 +748,7 @@ class CornellBoxApp:
         ]
         
         for j, line in enumerate(wall_info):
-            if j == 1:  # Строка со статусом
+            if j == 1:
                 text_color = status_color
             else:
                 text_color = (220, 220, 220)
@@ -720,28 +759,56 @@ class CornellBoxApp:
         
         y_offset += 10
         
-        # 6. УПРАВЛЕНИЕ ВТОРЫМ ИСТОЧНИКОМ СВЕТА - ТЕПЕРЬ ТОЧНО ВИДНО!
-        light_title = self.font.render("=== УПРАВЛЕНИЕ ВТОРЫМ СВЕТОМ ===", True, (255, 255, 200))
-        info_surface.blit(light_title, (10, y_offset))
+        # 6. ИСТОЧНИКИ СВЕТА (НОВОЕ!) - ТЕПЕРЬ 3 СВЕТА!
+        lights_title = self.font.render("=== ИСТОЧНИКИ СВЕТА (3 источника) ===", True, (255, 255, 200))
+        info_surface.blit(lights_title, (10, y_offset))
         y_offset += 25
         
-        # Позиция света (очень важно!)
-        light_pos = f"ПОЗИЦИЯ СВЕТА: X={self.light1_position[0]:.1f} Y={self.light1_position[1]:.1f} Z={self.light1_position[2]:.1f}"
-        pos_text = self.font.render(light_pos, True, (180, 255, 180))
-        info_surface.blit(pos_text, (15, y_offset))
+        # Информация о каждом источнике света
+        light_names = ["Основной (верхний)", "Зелёный", "Фиолетовый"]
+        for i, light in enumerate(self.lights):
+            status = "ВКЛ" if light['enabled'] else "ВЫКЛ"
+            status_color = (100, 255, 100) if light['enabled'] else (255, 100, 100)
+            
+            movable = "(подвижный)" if light['movable'] else "(неподвижный)"
+            selected = " ← ВЫБРАН" if i == self.selected_light and light['movable'] else ""
+            
+            light_info = f"{i+1}. {light_names[i]} {movable}: {status}{selected}"
+            
+            text_color = (255, 255, 200) if i == self.selected_light else (220, 220, 220)
+            
+            text = self.small_font.render(light_info, True, text_color)
+            info_surface.blit(text, (15, y_offset))
+            y_offset += 18
+            
+            # Позиция света
+            if light['movable']:
+                pos_text = f"   Позиция: X={light['position'][0]:.1f} Y={light['position'][1]:.1f} Z={light['position'][2]:.1f}"
+                pos_color = (180, 255, 180) if i == self.selected_light else (180, 180, 180)
+                pos_render = self.small_font.render(pos_text, True, pos_color)
+                info_surface.blit(pos_render, (25, y_offset))
+                y_offset += 18
+        
+        y_offset += 10
+        
+        # 7. УПРАВЛЕНИЕ СВЕТАМИ (НОВОЕ!)
+        light_controls_title = self.font.render("=== УПРАВЛЕНИЕ СВЕТАМИ ===", True, (255, 255, 200))
+        info_surface.blit(light_controls_title, (10, y_offset))
         y_offset += 25
         
-        # Управление светом - ВЫДЕЛЯЕМ КЛАВИШИ
+        # Клавиши управления
         light_controls = [
-            "U / J  -  двигать свет ВВЕРХ / ВНИЗ",
-            "H / K  -  двигать свет ВЛЕВО / ВПРАВО", 
-            "Y / I  -  двигать свет БЛИЖЕ / ДАЛЬШЕ"
+            "F1/F2/F3: включить/выключить свет 1/2/3",
+            "TAB: переключить выбранный свет (для управления)",
+            "U/J: двигать выбранный свет ВВЕРХ/ВНИЗ",
+            "H/K: двигать выбранный свет ВЛЕВО/ВПРАВО",
+            "Y/I: двигать выбранный свет БЛИЖЕ/ДАЛЬШЕ"
         ]
         
         for line in light_controls:
-            text = self.font.render(line, True, (180, 200, 255))
-            info_surface.blit(text, (20, y_offset))
-            y_offset += 25
+            text = self.small_font.render(line, True, (180, 200, 255))
+            info_surface.blit(text, (15, y_offset))
+            y_offset += 18
         
         # ОТОБРАЖЕНИЕ ПАНЕЛИ
         glDisable(GL_LIGHTING)
@@ -851,19 +918,30 @@ class CornellBoxApp:
                 elif event.key == pygame.K_n:
                     self.toggle_mirror_enabled()
                 
-                # Управление вторым источником света
+                # Управление источниками света (НОВОЕ!)
+                elif event.key == pygame.K_F1:
+                    self.toggle_light_enabled(0)
+                elif event.key == pygame.K_F2:
+                    self.toggle_light_enabled(1)
+                elif event.key == pygame.K_F3:
+                    self.toggle_light_enabled(2)
+                
+                elif event.key == pygame.K_TAB:
+                    self.select_next_light()
+                
+                # Управление выбранным источником света
                 elif event.key == pygame.K_u:
-                    self.move_light1('up')
+                    self.move_selected_light('up')
                 elif event.key == pygame.K_j:
-                    self.move_light1('down')
+                    self.move_selected_light('down')
                 elif event.key == pygame.K_h:
-                    self.move_light1('left')
+                    self.move_selected_light('left')
                 elif event.key == pygame.K_k:
-                    self.move_light1('right')
+                    self.move_selected_light('right')
                 elif event.key == pygame.K_y:
-                    self.move_light1('forward')
+                    self.move_selected_light('forward')
                 elif event.key == pygame.K_i:
-                    self.move_light1('backward')
+                    self.move_selected_light('backward')
                 
                 # Сброс настроек
                 elif event.key == pygame.K_r:
@@ -891,10 +969,19 @@ class CornellBoxApp:
         
         self.mirror_wall = 'back'
         self.mirror_enabled = False
-        self.light1_position = [0.5, 3.0, -2.0, 1.0]
+        
+        # Сброс источников света
+        self.lights[0]['position'] = [0.0, 4.5, 0.0, 1.0]
+        self.lights[1]['position'] = [0.5, 3.0, -2.0, 1.0]
+        self.lights[2]['position'] = [-1.5, 2.0, -1.5, 1.0]
+        
+        for light in self.lights:
+            light['enabled'] = True
+        
+        self.selected_light = 1
     
     def render(self):
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)  # ИСПРАВЛЕНО: было Бит, стало BIT
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
         
         glMatrixMode(GL_MODELVIEW)
         glLoadIdentity()
